@@ -3,6 +3,8 @@ from streamlit_autorefresh import st_autorefresh
 import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime
+import time
+import math
 
 from core.dados import obter_dados
 from core.indicadores import indicadores
@@ -18,14 +20,12 @@ st.set_page_config(
 )
 
 st_autorefresh(
-    interval=100000,
-    key="refresh"
+    interval=120000,
+    key="refresh_2_min"
 )
 
 st.markdown("""
-
 <style>
-
 .stApp{
 background:#050b14;
 color:white;
@@ -42,79 +42,123 @@ border:1px solid #1f2937;
 color:white !important;
 }
 
+h1,h2,h3{
+color:white;
+}
 </style>
-
-""",unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 st.title("NEXUS AI TRADER")
 st.caption(
-    "Institutional Trading Intelligence"
+    f"Institutional Trading Intelligence • Atualizado em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
 )
 
 # ======================
-# SCANNER MERCADO
+# LOTE ROTATIVO
 # ======================
 
-scanner=[]
+TAMANHO_LOTE = 10
+INTERVALO_SEGUNDOS = 120
 
-for ativo in IBOV:
+total_lotes = math.ceil(
+    len(IBOV) / TAMANHO_LOTE
+)
+
+lote_atual = int(
+    time.time() // INTERVALO_SEGUNDOS
+) % total_lotes
+
+inicio = lote_atual * TAMANHO_LOTE
+fim = inicio + TAMANHO_LOTE
+
+lote_base = IBOV[inicio:fim]
+
+pos_atual = ler_posicoes()
+
+ativos_abertos = []
+
+if not pos_atual.empty:
+
+    try:
+        ativos_abertos = list(
+            pos_atual[
+                pos_atual["status"] == "ABERTA"
+            ]["ativo"].unique()
+        )
+    except:
+        ativos_abertos = []
+
+ativos_scan = []
+
+for ativo in ativos_abertos + lote_base:
+
+    if ativo not in ativos_scan:
+
+        ativos_scan.append(ativo)
+
+ativos_scan = ativos_scan[:TAMANHO_LOTE]
+
+st.caption(
+    f"Lote {lote_atual + 1}/{total_lotes} • Escaneando {len(ativos_scan)} ativos"
+)
+
+# ======================
+# SCANNER
+# ======================
+
+scanner = []
+
+for ativo in ativos_scan:
 
     try:
 
-        df=obter_dados(
+        df = obter_dados(
             ativo
         )
 
         if df is None:
             continue
 
-        df=indicadores(
+        df = indicadores(
             df
         )
 
-        score,t,e,s,stop,take=gerar_score(
+        score, tendencia, entrada, sinais, stop, take = gerar_score(
             df,
             True
         )
 
-        preco=float(
+        preco = float(
             df["Close"].iloc[-1]
         )
 
         scanner.append({
-
-            "Ativo":ativo,
-
-            "Score":score,
-
-            "Entrada":e,
-
-            "Preço":preco,
-
-            "Stop":stop,
-
-            "Take":take,
-
-            "Tendência":t
-
+            "Ativo": ativo,
+            "Score": score,
+            "Entrada": entrada,
+            "Preço": round(preco, 2),
+            "Stop": round(stop, 2),
+            "Take": round(take, 2),
+            "Tendência": tendencia
         })
 
-    except:
+    except Exception as erro:
+        print(ativo, erro)
         continue
 
-scanner=pd.DataFrame(
+scanner = pd.DataFrame(
     scanner
 )
 
 if scanner.empty:
 
     st.error(
-        "Scanner vazio"
+        "Scanner vazio neste lote. Aguarde a próxima rodada ou verifique o limite da API."
     )
 
     st.stop()
 
-scanner=scanner.sort_values(
+scanner = scanner.sort_values(
     "Score",
     ascending=False
 )
@@ -123,9 +167,9 @@ scanner=scanner.sort_values(
 # CARTEIRA
 # ======================
 
-carteira=ler_carteira()
+carteira = ler_carteira()
 
-saldo=float(
+saldo = float(
     carteira["saldo"].iloc[0]
 )
 
@@ -133,41 +177,29 @@ saldo=float(
 # ROBO AUTÔNOMO
 # ======================
 
-precos={}
+precos = {}
 
-for _,row in scanner.iterrows():
+for _, row in scanner.iterrows():
 
-    ativo=row["Ativo"]
+    ativo = row["Ativo"]
+    preco = float(row["Preço"])
+    score = float(row["Score"])
+    stop = float(row["Stop"])
+    take = float(row["Take"])
 
-    preco=row["Preço"]
+    precos[ativo] = preco
 
-    score=row["Score"]
-
-    stop=row["Stop"]
-
-    take=row["Take"]
-
-    precos[
-        ativo
-    ]=preco
-
-    if score>=55:
+    if score >= 55:
 
         abrir(
-
             ativo,
-
             preco,
-
             stop,
-
             take,
-
             saldo
-
         )
 
-pos,saldo=atualizar(
+pos, saldo = atualizar(
     precos,
     saldo
 )
@@ -176,33 +208,33 @@ registrar(
     saldo
 )
 
-hist=ler()
+hist = ler()
 
 # ======================
 # KPIS
 # ======================
 
-wins=len(
+wins = len(
     pos[
-        pos["status"]=="WIN"
+        pos["status"] == "WIN"
     ]
 )
 
-loss=len(
+loss = len(
     pos[
-        pos["status"]=="LOSS"
+        pos["status"] == "LOSS"
     ]
 )
 
-abertas=len(
+abertas = len(
     pos[
-        pos["status"]=="ABERTA"
+        pos["status"] == "ABERTA"
     ]
 )
 
-pl=saldo-100000
+pl = saldo - 100000
 
-k1,k2,k3,k4,k5,k6=st.columns(6)
+k1, k2, k3, k4, k5, k6 = st.columns(6)
 
 k1.metric(
     "💰 Patrimônio",
@@ -233,7 +265,7 @@ k6.metric(
     "📊 SINAIS",
     len(
         scanner[
-            scanner["Score"]>=55
+            scanner["Score"] >= 55
         ]
     )
 )
@@ -242,8 +274,8 @@ k6.metric(
 # LAYOUT
 # ======================
 
-esq,dir=st.columns(
-    [1,2]
+esq, dir = st.columns(
+    [1, 2]
 )
 
 with esq:
@@ -253,13 +285,9 @@ with esq:
     )
 
     st.dataframe(
-
-        scanner.head(20),
-
+        scanner,
         height=350,
-
         use_container_width=True
-
     )
 
     st.subheader(
@@ -267,88 +295,59 @@ with esq:
     )
 
     st.dataframe(
-
         pos.tail(20),
-
-        height=250,
-
+        height=280,
         use_container_width=True
-
     )
 
 with dir:
 
-    ativo=st.selectbox(
+    ativo_grafico = st.selectbox(
         "Mercado",
         scanner["Ativo"]
     )
 
-    df=obter_dados(
-        ativo
+    df_grafico = obter_dados(
+        ativo_grafico
     )
 
-    df=indicadores(
-        df
+    df_grafico = indicadores(
+        df_grafico
     )
 
-    fig=go.Figure()
+    fig = go.Figure()
 
     fig.add_trace(
-
         go.Candlestick(
-
-            x=df["Date"],
-
-            open=df["Open"],
-
-            high=df["High"],
-
-            low=df["Low"],
-
-            close=df["Close"]
-
+            x=df_grafico["Date"],
+            open=df_grafico["Open"],
+            high=df_grafico["High"],
+            low=df_grafico["Low"],
+            close=df_grafico["Close"]
         )
-
     )
 
     fig.add_trace(
-
         go.Scatter(
-
-            x=df["Date"],
-
-            y=df["EMA21"],
-
+            x=df_grafico["Date"],
+            y=df_grafico["EMA21"],
             name="EMA21"
-
         )
-
     )
 
     fig.add_trace(
-
         go.Scatter(
-
-            x=df["Date"],
-
-            y=df["EMA80"],
-
+            x=df_grafico["Date"],
+            y=df_grafico["EMA80"],
             name="EMA80"
-
         )
-
     )
 
     fig.update_layout(
-
         height=700,
-
         paper_bgcolor="#111827",
-
         plot_bgcolor="#111827",
-
         font_color="white"
-
     )
 
     st.plotly_chart(
@@ -360,32 +359,21 @@ st.subheader(
     "EVOLUÇÃO PATRIMÔNIO"
 )
 
-fig2=go.Figure()
+fig2 = go.Figure()
 
 fig2.add_trace(
-
     go.Scatter(
-
         x=hist["data"],
-
         y=hist["saldo"],
-
         fill="tozeroy"
-
     )
-
 )
 
 fig2.update_layout(
-
     height=300,
-
     paper_bgcolor="#111827",
-
     plot_bgcolor="#111827",
-
     font_color="white"
-
 )
 
 st.plotly_chart(

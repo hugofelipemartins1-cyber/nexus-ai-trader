@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 
 
-@st.cache_data(ttl=21600)
+@st.cache_data(ttl=120)
 def obter_dados(ticker):
 
     try:
@@ -29,7 +29,6 @@ def obter_dados(ticker):
         dados = []
 
         for data, valores in serie.items():
-
             dados.append({
                 "Date": pd.to_datetime(data),
                 "Open": float(valores["1. open"]),
@@ -40,9 +39,7 @@ def obter_dados(ticker):
             })
 
         df = pd.DataFrame(dados)
-
         df = df.sort_values("Date")
-
         df = df.dropna()
 
         return df
