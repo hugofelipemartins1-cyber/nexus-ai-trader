@@ -2,84 +2,51 @@ import requests
 import pandas as pd
 import streamlit as st
 
-@st.cache_data(ttl=300)
+
+@st.cache_data(ttl=21600)
 def obter_dados(ticker):
 
     try:
-
         chave = st.secrets["ALPHA_KEY"]
 
-        simbolo = ticker.replace(
-            ".SA",
-            ""
-        )
+        simbolo = ticker.replace(".SA", ".SAO")
 
         url = (
-
-        "https://www.alphavantage.co/query"
-
-        f"?function=TIME_SERIES_DAILY"
-
-        f"&symbol={simbolo}"
-
-        f"&apikey={chave}"
-
-        "&outputsize=full"
-
+            "https://www.alphavantage.co/query"
+            f"?function=TIME_SERIES_DAILY"
+            f"&symbol={simbolo}"
+            f"&apikey={chave}"
+            "&outputsize=compact"
         )
 
-        r = requests.get(
-            url
-        ).json()
+        resposta = requests.get(url, timeout=20).json()
 
-        serie = r[
-            "Time Series (Daily)"
-        ]
+        if "Time Series (Daily)" not in resposta:
+            return None
 
-        linhas=[]
+        serie = resposta["Time Series (Daily)"]
 
-        for d,v in serie.items():
+        dados = []
 
-            linhas.append({
+        for data, valores in serie.items():
 
-            "Date":d,
-
-            "Open":float(
-            v["1. open"]
-            ),
-
-            "High":float(
-            v["2. high"]
-            ),
-
-            "Low":float(
-            v["3. low"]
-            ),
-
-            "Close":float(
-            v["4. close"]
-            ),
-
-            "Volume":float(
-            v["5. volume"]
-            )
-
+            dados.append({
+                "Date": pd.to_datetime(data),
+                "Open": float(valores["1. open"]),
+                "High": float(valores["2. high"]),
+                "Low": float(valores["3. low"]),
+                "Close": float(valores["4. close"]),
+                "Volume": float(valores["5. volume"])
             })
 
-        df=pd.DataFrame(
-            linhas
-        )
+        df = pd.DataFrame(dados)
 
-        df["Date"]=pd.to_datetime(
-            df["Date"]
-        )
+        df = df.sort_values("Date")
 
-        df=df.sort_values(
-            "Date"
-        )
+        df = df.dropna()
 
         return df
 
-    except:
-
+    except Exception as erro:
+        print(ticker, erro)
         return None
