@@ -1,62 +1,82 @@
-import yfinance as yf
+import requests
 import pandas as pd
 import streamlit as st
-from core.mercado import IBOV
 
 @st.cache_data(ttl=300)
-def baixar_mercado():
+def obter_dados(ticker):
 
     try:
 
-        dados = yf.download(
+        chave = st.secrets["ALPHA_KEY"]
 
-            tickers=IBOV,
+        simbolo = ticker.replace(
+            ".SA",
+            ""
+        )
 
-            period="1y",
+        url = (
 
-            interval="1d",
+        "https://www.alphavantage.co/query"
 
-            auto_adjust=True,
+        f"?function=TIME_SERIES_DAILY"
 
-            progress=False,
+        f"&symbol={simbolo}"
 
-            group_by="ticker",
+        f"&apikey={chave}"
 
-            threads=False
+        "&outputsize=full"
 
         )
 
-        return dados
+        r = requests.get(
+            url
+        ).json()
 
-    except:
+        serie = r[
+            "Time Series (Daily)"
+        ]
 
-        return None
+        linhas=[]
 
+        for d,v in serie.items():
 
-def obter_dados(ticker):
+            linhas.append({
 
-    mercado = baixar_mercado()
+            "Date":d,
 
-    if mercado is None:
+            "Open":float(
+            v["1. open"]
+            ),
 
-        return None
+            "High":float(
+            v["2. high"]
+            ),
 
-    try:
+            "Low":float(
+            v["3. low"]
+            ),
 
-        df = mercado[ticker]
+            "Close":float(
+            v["4. close"]
+            ),
 
-        df = df.reset_index()
+            "Volume":float(
+            v["5. volume"]
+            )
 
-        df = df[[
-            "Date",
-            "Open",
-            "High",
-            "Low",
-            "Close",
-            "Volume"
-        ]]
+            })
 
-        df = df.dropna()
+        df=pd.DataFrame(
+            linhas
+        )
+
+        df["Date"]=pd.to_datetime(
+            df["Date"]
+        )
+
+        df=df.sort_values(
+            "Date"
+        )
 
         return df
 
