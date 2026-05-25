@@ -1,11 +1,20 @@
 import yfinance as yf
 import pandas as pd
+import streamlit as st
 
-def obter_dados(ticker):
+@st.cache_data(
+    ttl=300
+)
+
+def obter_dados(
+
+    ticker
+
+):
 
     try:
 
-        df = yf.download(
+        df=yf.download(
 
             ticker,
 
@@ -15,7 +24,9 @@ def obter_dados(ticker):
 
             auto_adjust=True,
 
-            progress=False
+            progress=False,
+
+            threads=False
 
         )
 
@@ -23,19 +34,18 @@ def obter_dados(ticker):
 
             return None
 
-        # remove MultiIndex novo do Yahoo
         if isinstance(
             df.columns,
             pd.MultiIndex
         ):
 
-            df.columns = df.columns.droplevel(
+            df.columns=df.columns.droplevel(
                 1
             )
 
-        df = df.reset_index()
+        df=df.reset_index()
 
-        colunas = [
+        df=df[[
 
             "Date",
             "Open",
@@ -44,21 +54,10 @@ def obter_dados(ticker):
             "Close",
             "Volume"
 
-        ]
-
-        df = df[
-            colunas
-        ]
-
-        df = df.dropna()
+        ]]
 
         return df
 
-    except Exception as erro:
-
-        print(
-            ticker,
-            erro
-        )
+    except:
 
         return None
