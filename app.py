@@ -6,12 +6,11 @@ from datetime import datetime
 import time
 import math
 
+from core.auth import tela_login
 from core.dados import obter_dados
 from core.indicadores import indicadores
 from core.score import gerar_score
 from core.executor import abrir, atualizar, ler_posicoes
-from core.carteira import ler_carteira
-from core.patrimonio import registrar, ler
 from core.mercado import IBOV
 
 st.set_page_config(
@@ -19,13 +18,35 @@ st.set_page_config(
     layout="wide"
 )
 
+# =========================
+# LOGIN
+# =========================
+
+if "user" not in st.session_state:
+
+    tela_login()
+
+    st.stop()
+
+usuario = st.session_state["user"]
+
+# =========================
+# REFRESH
+# =========================
+
 st_autorefresh(
     interval=120000,
     key="refresh_2_min"
 )
 
+# =========================
+# CSS
+# =========================
+
 st.markdown("""
+
 <style>
+
 .stApp{
 background:#050b14;
 color:white;
@@ -42,22 +63,28 @@ border:1px solid #1f2937;
 color:white !important;
 }
 
-h1,h2,h3{
-color:white;
-}
 </style>
+
 """, unsafe_allow_html=True)
 
-st.title("NEXUS AI TRADER")
-st.caption(
-    f"Institutional Trading Intelligence • Atualizado em {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+# =========================
+# HEADER
+# =========================
+
+st.title(
+    "NEXUS AI TRADER"
 )
 
-# ======================
+st.caption(
+    f"Institutional Trading Intelligence • {usuario.email}"
+)
+
+# =========================
 # LOTE ROTATIVO
-# ======================
+# =========================
 
 TAMANHO_LOTE = 10
+
 INTERVALO_SEGUNDOS = 120
 
 total_lotes = math.ceil(
@@ -69,44 +96,18 @@ lote_atual = int(
 ) % total_lotes
 
 inicio = lote_atual * TAMANHO_LOTE
+
 fim = inicio + TAMANHO_LOTE
 
-lote_base = IBOV[inicio:fim]
-
-pos_atual = ler_posicoes()
-
-ativos_abertos = []
-
-if not pos_atual.empty:
-
-    try:
-        ativos_abertos = list(
-            pos_atual[
-                pos_atual["status"] == "ABERTA"
-            ]["ativo"].unique()
-        )
-    except:
-        ativos_abertos = []
-
-ativos_scan = []
-
-for ativo in ativos_abertos + lote_base:
-
-    if ativo not in ativos_scan:
-
-        ativos_scan.append(ativo)
-
-ativos_scan = ativos_scan[:TAMANHO_LOTE]
-
-st.caption(
-    f"Lote {lote_atual + 1}/{total_lotes} • Escaneando {len(ativos_scan)} ativos"
-)
-
-# ======================
-# SCANNER
-# ======================
+ativos_scan = IBOV[
+    inicio:fim
+]
 
 scanner = []
+
+# =========================
+# SCANNER
+# =========================
 
 for ativo in ativos_scan:
 
@@ -117,13 +118,14 @@ for ativo in ativos_scan:
         )
 
         if df is None:
+
             continue
 
         df = indicadores(
             df
         )
 
-        score, tendencia, entrada, sinais, stop, take = gerar_score(
+        score,t,e,s,stop,take = gerar_score(
             df,
             True
         )
@@ -133,18 +135,23 @@ for ativo in ativos_scan:
         )
 
         scanner.append({
-            "Ativo": ativo,
-            "Score": score,
-            "Entrada": entrada,
-            "Preço": round(preco, 2),
-            "Stop": round(stop, 2),
-            "Take": round(take, 2),
-            "Tendência": tendencia
+
+            "Ativo":ativo,
+            "Score":score,
+            "Entrada":e,
+            "Preço":round(preco,2),
+            "Stop":round(stop,2),
+            "Take":round(take,2),
+            "Tendência":t
+
         })
 
     except Exception as erro:
-        print(ativo, erro)
-        continue
+
+        print(
+            ativo,
+            erro
+        )
 
 scanner = pd.DataFrame(
     scanner
@@ -153,7 +160,7 @@ scanner = pd.DataFrame(
 if scanner.empty:
 
     st.error(
-        "Scanner vazio neste lote. Aguarde a próxima rodada ou verifique o limite da API."
+        "Scanner vazio"
     )
 
     st.stop()
@@ -163,78 +170,77 @@ scanner = scanner.sort_values(
     ascending=False
 )
 
-# ======================
-# CARTEIRA
-# ======================
-
-carteira = ler_carteira()
-
-saldo = float(
-    carteira["saldo"].iloc[0]
-)
-
-# ======================
-# ROBO AUTÔNOMO
-# ======================
+# =========================
+# ROBO
+# =========================
 
 precos = {}
 
-for _, row in scanner.iterrows():
+for _,row in scanner.iterrows():
 
     ativo = row["Ativo"]
-    preco = float(row["Preço"])
-    score = float(row["Score"])
-    stop = float(row["Stop"])
-    take = float(row["Take"])
 
-    precos[ativo] = preco
+    preco = row["Preço"]
+
+    stop = row["Stop"]
+
+    take = row["Take"]
+
+    score = row["Score"]
+
+    precos[
+        ativo
+    ] = preco
 
     if score >= 55:
 
         abrir(
+
+            usuario.id,
+
             ativo,
+
             preco,
+
             stop,
-            take,
-            saldo
+
+            take
+
         )
 
-pos, saldo = atualizar(
-    precos,
-    saldo
+pos,saldo = atualizar(
+
+    usuario.id,
+
+    precos
+
 )
 
-registrar(
-    saldo
-)
-
-hist = ler()
-
-# ======================
+# =========================
 # KPIS
-# ======================
+# =========================
 
 wins = len(
     pos[
-        pos["status"] == "WIN"
+        pos["status"]=="WIN"
     ]
 )
 
 loss = len(
     pos[
-        pos["status"] == "LOSS"
+        pos["status"]=="LOSS"
     ]
 )
 
 abertas = len(
     pos[
-        pos["status"] == "ABERTA"
+        pos["status"]=="ABERTA"
     ]
 )
 
 pl = saldo - 100000
 
-k1, k2, k3, k4, k5, k6 = st.columns(6)
+k1,k2,k3,k4,k5,k6 = st.columns(6)
 
 k1.metric(
     "💰 Patrimônio",
@@ -265,17 +271,17 @@ k6.metric(
     "📊 SINAIS",
     len(
         scanner[
-            scanner["Score"] >= 55
+            scanner["Score"]>=55
         ]
     )
 )
 
-# ======================
+# =========================
 # LAYOUT
-# ======================
+# =========================
 
-esq, dir = st.columns(
-    [1, 2]
+esq,dir = st.columns(
+    [1,2]
 )
 
 with esq:
@@ -286,8 +292,8 @@ with esq:
 
     st.dataframe(
         scanner,
-        height=350,
-        use_container_width=True
+        use_container_width=True,
+        height=350
     )
 
     st.subheader(
@@ -295,88 +301,87 @@ with esq:
     )
 
     st.dataframe(
-        pos.tail(20),
-        height=280,
-        use_container_width=True
+        pos,
+        use_container_width=True,
+        height=300
     )
 
 with dir:
 
-    ativo_grafico = st.selectbox(
+    ativo = st.selectbox(
         "Mercado",
         scanner["Ativo"]
     )
 
-    df_grafico = obter_dados(
-        ativo_grafico
+    df = obter_dados(
+        ativo
     )
 
-    df_grafico = indicadores(
-        df_grafico
+    df = indicadores(
+        df
     )
 
     fig = go.Figure()
 
     fig.add_trace(
+
         go.Candlestick(
-            x=df_grafico["Date"],
-            open=df_grafico["Open"],
-            high=df_grafico["High"],
-            low=df_grafico["Low"],
-            close=df_grafico["Close"]
+
+            x=df["Date"],
+
+            open=df["Open"],
+
+            high=df["High"],
+
+            low=df["Low"],
+
+            close=df["Close"]
+
         )
+
     )
 
     fig.add_trace(
+
         go.Scatter(
-            x=df_grafico["Date"],
-            y=df_grafico["EMA21"],
+
+            x=df["Date"],
+
+            y=df["EMA21"],
+
             name="EMA21"
+
         )
+
     )
 
     fig.add_trace(
+
         go.Scatter(
-            x=df_grafico["Date"],
-            y=df_grafico["EMA80"],
+
+            x=df["Date"],
+
+            y=df["EMA80"],
+
             name="EMA80"
+
         )
+
     )
 
     fig.update_layout(
+
         height=700,
+
         paper_bgcolor="#111827",
+
         plot_bgcolor="#111827",
+
         font_color="white"
+
     )
 
     st.plotly_chart(
         fig,
         use_container_width=True
     )
-
-st.subheader(
-    "EVOLUÇÃO PATRIMÔNIO"
-)
-
-fig2 = go.Figure()
-
-fig2.add_trace(
-    go.Scatter(
-        x=hist["data"],
-        y=hist["saldo"],
-        fill="tozeroy"
-    )
-)
-
-fig2.update_layout(
-    height=300,
-    paper_bgcolor="#111827",
-    plot_bgcolor="#111827",
-    font_color="white"
-)
-
-st.plotly_chart(
-    fig2,
-    use_container_width=True
-)
