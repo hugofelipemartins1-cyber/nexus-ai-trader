@@ -1,22 +1,16 @@
 import yfinance as yf
 import pandas as pd
 import streamlit as st
+from core.mercado import IBOV
 
-@st.cache_data(
-    ttl=300
-)
-
-def obter_dados(
-
-    ticker
-
-):
+@st.cache_data(ttl=300)
+def baixar_mercado():
 
     try:
 
-        df=yf.download(
+        dados = yf.download(
 
-            ticker,
+            tickers=IBOV,
 
             period="1y",
 
@@ -26,35 +20,43 @@ def obter_dados(
 
             progress=False,
 
+            group_by="ticker",
+
             threads=False
 
         )
 
-        if df.empty:
+        return dados
 
-            return None
+    except:
 
-        if isinstance(
-            df.columns,
-            pd.MultiIndex
-        ):
+        return None
 
-            df.columns=df.columns.droplevel(
-                1
-            )
 
-        df=df.reset_index()
+def obter_dados(ticker):
 
-        df=df[[
+    mercado = baixar_mercado()
 
+    if mercado is None:
+
+        return None
+
+    try:
+
+        df = mercado[ticker]
+
+        df = df.reset_index()
+
+        df = df[[
             "Date",
             "Open",
             "High",
             "Low",
             "Close",
             "Volume"
-
         ]]
+
+        df = df.dropna()
 
         return df
 
