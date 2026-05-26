@@ -1,91 +1,73 @@
 import streamlit as st
 
 from core.database import (
-
     criar_usuario,
-    login_usuario,
-    criar_carteira
-
+    login_usuario
 )
 
 def tela_login():
 
-    st.title(
-        "NEXUS AI TRADER"
-    )
+    st.title("NEXUS AI TRADER")
 
     menu = st.selectbox(
-
         "Acesso",
-
         [
-
             "Entrar",
             "Cadastrar"
-
         ]
-
     )
 
-    email = st.text_input(
-        "Email"
-    )
+    email = st.text_input("Email")
 
     senha = st.text_input(
         "Senha",
         type="password"
     )
 
-    if menu=="Cadastrar":
+    if menu == "Cadastrar":
 
-        if st.button(
-            "Criar Conta"
-        ):
+        if st.button("Criar Conta"):
 
-            user = criar_usuario(
+            if not email or not senha:
+
+                st.error("Informe email e senha.")
+
+                return
+
+            resposta = criar_usuario(
                 email,
                 senha
             )
 
-            try:
-
-                uid = user.user.id
-
-                criar_carteira(
-                    uid
-                )
+            if resposta["ok"]:
 
                 st.success(
-                    "Conta criada"
+                    "Conta criada com sucesso. Agora selecione Entrar."
                 )
 
-            except:
+            else:
 
                 st.error(
-                    "Erro cadastro"
+                    f"Erro cadastro: {resposta['erro']}"
                 )
 
     else:
 
-        if st.button(
-            "Entrar"
-        ):
+        if st.button("Entrar"):
 
-            user = login_usuario(
+            resposta = login_usuario(
                 email,
                 senha
             )
 
-            if user:
+            if resposta["ok"]:
 
-                st.session_state[
-                    "user"
-                ] = user.user
+                st.session_state["user"] = resposta["data"].user
 
                 st.rerun()
 
             else:
 
                 st.error(
-                    "Login inválido"
+                    f"Login inválido: {resposta['erro']}"
                 )

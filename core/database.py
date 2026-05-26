@@ -9,167 +9,43 @@ supabase = create_client(
     SUPABASE_KEY
 )
 
-# =========================
-# USUARIO
-# =========================
-
-def criar_usuario(
-
-    email,
-    senha
-
-):
+def criar_usuario(email, senha):
 
     try:
-
-        user = supabase.auth.sign_up({
-
-            "email":email,
-            "password":senha
-
+        resposta = supabase.auth.sign_up({
+            "email": email,
+            "password": senha
         })
 
-        return user
+        return {
+            "ok": True,
+            "data": resposta
+        }
 
-    except Exception as e:
+    except Exception as erro:
 
-        return str(e)
+        return {
+            "ok": False,
+            "erro": str(erro)
+        }
 
-def login_usuario(
 
-    email,
-    senha
-
-):
+def login_usuario(email, senha):
 
     try:
-
-        user = supabase.auth.sign_in_with_password({
-
-            "email":email,
-            "password":senha
-
+        resposta = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": senha
         })
 
-        return user
+        return {
+            "ok": True,
+            "data": resposta
+        }
 
-    except Exception as e:
+    except Exception as erro:
 
-        return None
-
-# =========================
-# CARTEIRA
-# =========================
-
-def criar_carteira(
-
-    usuario_id
-
-):
-
-    supabase.table(
-        "carteiras"
-    ).insert({
-
-        "usuario_id":usuario_id,
-        "saldo":100000,
-        "lucro":0
-
-    }).execute()
-
-def buscar_carteira(
-
-    usuario_id
-
-):
-
-    dados = supabase.table(
-        "carteiras"
-    ).select("*").eq(
-        "usuario_id",
-        usuario_id
-    ).execute()
-
-    return dados.data
-
-# =========================
-# OPERAÇÕES
-# =========================
-
-def salvar_operacao(
-
-    usuario_id,
-    ativo,
-    entrada,
-    stop,
-    take,
-    quantidade,
-    status,
-    pl
-
-):
-
-    supabase.table(
-        "operacoes"
-    ).insert({
-
-        "usuario_id":usuario_id,
-        "ativo":ativo,
-        "entrada":entrada,
-        "stop":stop,
-        "take":take,
-        "quantidade":quantidade,
-        "status":status,
-        "pl":pl
-
-    }).execute()
-
-def buscar_operacoes(
-
-    usuario_id
-
-):
-
-    dados = supabase.table(
-        "operacoes"
-    ).select("*").eq(
-        "usuario_id",
-        usuario_id
-    ).execute()
-
-    return dados.data
-
-# =========================
-# PATRIMONIO
-# =========================
-
-def salvar_patrimonio(
-
-    usuario_id,
-    saldo
-
-):
-
-    supabase.table(
-        "patrimonio"
-    ).insert({
-
-        "usuario_id":usuario_id,
-        "saldo":saldo
-
-    }).execute()
-
-def buscar_patrimonio(
-
-    usuario_id
-
-):
-
-    dados = supabase.table(
-        "patrimonio"
-    ).select("*").eq(
-        "usuario_id",
-        usuario_id
-    ).execute()
-
-    return dados.data
+        return {
+            "ok": False,
+            "erro": str(erro)
+        }
