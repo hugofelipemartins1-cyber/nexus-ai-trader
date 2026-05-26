@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=1800)
 def obter_dados(ticker):
 
     try:
@@ -19,9 +19,13 @@ def obter_dados(ticker):
             "&outputsize=compact"
         )
 
-        resposta = requests.get(url, timeout=20).json()
+        resposta = requests.get(
+            url,
+            timeout=20
+        ).json()
 
         if "Time Series (Daily)" not in resposta:
+            print(ticker, resposta)
             return None
 
         serie = resposta["Time Series (Daily)"]
@@ -29,6 +33,7 @@ def obter_dados(ticker):
         dados = []
 
         for data, valores in serie.items():
+
             dados.append({
                 "Date": pd.to_datetime(data),
                 "Open": float(valores["1. open"]),
@@ -39,7 +44,9 @@ def obter_dados(ticker):
             })
 
         df = pd.DataFrame(dados)
+
         df = df.sort_values("Date")
+
         df = df.dropna()
 
         return df

@@ -10,17 +10,13 @@ from core.auth import tela_login
 from core.dados import obter_dados
 from core.indicadores import indicadores
 from core.score import gerar_score
-from core.executor import abrir, atualizar, ler_posicoes
+from core.executor import abrir, atualizar
 from core.mercado import IBOV
 
 st.set_page_config(
     page_title="NEXUS AI TRADER",
     layout="wide"
 )
-
-# =========================
-# LOGIN
-# =========================
 
 if "user" not in st.session_state:
 
@@ -30,23 +26,13 @@ if "user" not in st.session_state:
 
 usuario = st.session_state["user"]
 
-# =========================
-# REFRESH
-# =========================
-
 st_autorefresh(
     interval=120000,
     key="refresh_2_min"
 )
 
-# =========================
-# CSS
-# =========================
-
 st.markdown("""
-
 <style>
-
 .stApp{
 background:#050b14;
 color:white;
@@ -62,28 +48,17 @@ border:1px solid #1f2937;
 [data-testid="metric-container"] *{
 color:white !important;
 }
-
 </style>
-
 """, unsafe_allow_html=True)
 
-# =========================
-# HEADER
-# =========================
-
-st.title(
-    "NEXUS AI TRADER"
-)
+st.title("NEXUS AI TRADER")
 
 st.caption(
-    f"Institutional Trading Intelligence • {usuario.email}"
+    f"Institutional Trading Intelligence • {usuario.email} • "
+    f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
 )
 
-# =========================
-# LOTE ROTATIVO
-# =========================
-
-TAMANHO_LOTE = 10
+TAMANHO_LOTE = 4
 
 INTERVALO_SEGUNDOS = 120
 
@@ -103,11 +78,14 @@ ativos_scan = IBOV[
     inicio:fim
 ]
 
+st.caption(
+    f"Lote {lote_atual + 1}/{total_lotes} • "
+    f"Escaneando {len(ativos_scan)} ativos"
+)
+
 scanner = []
 
-# =========================
-# SCANNER
-# =========================
+dados_grafico = {}
 
 for ativo in ativos_scan:
 
@@ -125,7 +103,7 @@ for ativo in ativos_scan:
             df
         )
 
-        score,t,e,s,stop,take = gerar_score(
+        score,tendencia,entrada,sinais,stop,take = gerar_score(
             df,
             True
         )
@@ -134,16 +112,18 @@ for ativo in ativos_scan:
             df["Close"].iloc[-1]
         )
 
-        scanner.append({
+        dados_grafico[
+            ativo
+        ] = df
 
+        scanner.append({
             "Ativo":ativo,
             "Score":score,
-            "Entrada":e,
+            "Entrada":entrada,
             "Preço":round(preco,2),
             "Stop":round(stop,2),
             "Take":round(take,2),
-            "Tendência":t
-
+            "Tendência":tendencia
         })
 
     except Exception as erro:
@@ -160,7 +140,7 @@ scanner = pd.DataFrame(
 if scanner.empty:
 
     st.error(
-        "Scanner vazio"
+        "Scanner vazio neste lote. A API gratuita limitou as consultas. Aguarde a próxima rodada."
     )
 
     st.stop()
@@ -170,23 +150,27 @@ scanner = scanner.sort_values(
     ascending=False
 )
 
-# =========================
-# ROBO
-# =========================
-
 precos = {}
 
 for _,row in scanner.iterrows():
 
     ativo = row["Ativo"]
 
-    preco = row["Preço"]
+    preco = float(
+        row["Preço"]
+    )
 
-    stop = row["Stop"]
+    score = float(
+        row["Score"]
+    )
 
-    take = row["Take"]
+    stop = float(
+        row["Stop"]
+    )
 
-    score = row["Score"]
+    take = float(
+        row["Take"]
+    )
 
     precos[
         ativo
@@ -195,30 +179,17 @@ for _,row in scanner.iterrows():
     if score >= 55:
 
         abrir(
-
-            usuario.id,
-
             ativo,
-
             preco,
-
             stop,
-
-            take
-
+            take,
+            100000
         )
 
 pos,saldo = atualizar(
-
-    usuario.id,
-
-    precos
-
+    precos,
+    100000
 )
-
-# =========================
-# KPIS
-# =========================
 
 wins = len(
     pos[
@@ -276,10 +247,6 @@ k6.metric(
     )
 )
 
-# =========================
-# LAYOUT
-# =========================
-
 esq,dir = st.columns(
     [1,2]
 )
@@ -301,84 +268,55 @@ with esq:
     )
 
     st.dataframe(
-        pos,
+        pos.tail(20),
         use_container_width=True,
         height=300
     )
 
 with dir:
 
-    ativo = st.selectbox(
+    ativo_grafico = st.selectbox(
         "Mercado",
         scanner["Ativo"]
     )
 
-    df = obter_dados(
-        ativo
-    )
-
-    df = indicadores(
-        df
-    )
+    df_grafico = dados_grafico[
+        ativo_grafico
+    ]
 
     fig = go.Figure()
 
     fig.add_trace(
-
         go.Candlestick(
-
-            x=df["Date"],
-
-            open=df["Open"],
-
-            high=df["High"],
-
-            low=df["Low"],
-
-            close=df["Close"]
-
+            x=df_grafico["Date"],
+            open=df_grafico["Open"],
+            high=df_grafico["High"],
+            low=df_grafico["Low"],
+            close=df_grafico["Close"]
         )
-
     )
 
     fig.add_trace(
-
         go.Scatter(
-
-            x=df["Date"],
-
-            y=df["EMA21"],
-
+            x=df_grafico["Date"],
+            y=df_grafico["EMA21"],
             name="EMA21"
-
         )
-
     )
 
     fig.add_trace(
-
         go.Scatter(
-
-            x=df["Date"],
-
-            y=df["EMA80"],
-
+            x=df_grafico["Date"],
+            y=df_grafico["EMA80"],
             name="EMA80"
-
         )
-
     )
 
     fig.update_layout(
-
         height=700,
-
         paper_bgcolor="#111827",
-
         plot_bgcolor="#111827",
-
         font_color="white"
-
     )
 
     st.plotly_chart(
